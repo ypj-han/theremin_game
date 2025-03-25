@@ -1,10 +1,3 @@
-// parameters
-let p = {
-  keyPoints: true,
-  skeleton: true,
-  info: false,
-};
-
 // main variances
 let volume = 0;
 let pitch = 0;
@@ -12,41 +5,40 @@ let osc, playing, freq, amp;
 let reverb;
 let scaleNotes = [];
 let scaleFreqs = [];
-let noteDiffs = [2,3,4,5,6,7,9,11,12]; // Major b3 #4
+let noteDiffs = [2, 3, 4, 5, 6, 7, 9, 11, 12]; // Major b3 #4
 let basicNote = 5; // F
-// the HandPose model
-// using https://docs.ml5js.org/#/reference/handpose
-let model;
-// latest model predictions
-let predictions = [];
-// video capture
-let video;
 
+// the HandPose model
+let model;
+let predictions = [];
+let video;
 let img;
+
+// flappy bird game
+let bird;
+let pipes = [];
+// let gameOver = false;
+
 function preload() {
-  // initialize the model
   model = ml5.handPose(
-    // model options
     {
-      flipped: true, // mirror the predictions to match video
+      flipped: true,
       maxHands: 2,
       modelType: "full",
     },
-    // callback when loaded
     () => {
       console.log("🚀 model loaded");
     }
   );
-
   img = loadImage("theremin.png");
 }
 
-function cal_scaleNotes(){
+function cal_scaleNotes() {
   let note = basicNote;
-  let i=0;
-  let j=0;
-  while(note < 119){
-    note = basicNote+noteDiffs[i]+j*12;
+  let i = 0;
+  let j = 0;
+  while (note < 119) {
+    note = basicNote + noteDiffs[i] + j * 12;
     scaleNotes.push(note);
     scaleFreqs.push(midiToFreq(note));
     i++;
@@ -54,83 +46,88 @@ function cal_scaleNotes(){
       i = 0;
       j++;
     }
-    //console.log(note);  
   }
-  //console.log(scaleNotes);
-  console.log(scaleFreqs);
 }
 
-function quantizeToScale(freq,scale){
+function quantizeToScale(freq, scale) {
   let minDiff = Infinity;
   let quantizedFreq = freq;
-
   for (let noteFrq of scale) {
-    let diff = Math.abs(freq-noteFrq);
+    let diff = Math.abs(freq - noteFrq);
     if (diff < minDiff) {
       minDiff = diff;
       quantizedFreq = noteFrq;
     }
   }
-
   return quantizedFreq;
-
 }
 
 function setup() {
-  createCanvas(800, 600);
+  let w = windowWidth;
+  let h = w * 3 / 4;
+  createCanvas(w, h);
 
-  // create an HTML video capture object
-  // (flipped means the video is mirrored)
   video = createCapture(VIDEO, { flipped: true });
-  video.size(width, height);
-  // Hide the video element, and just show the canvas
+  video.size(w, h);
   video.hide();
 
-  // add params to Settings GUI
-  createSettingsGui(p, { callback: paramChanged, load: false });
-
-  // set the detection callback
   model.detectStart(video, (results) => {
-    // console.log(`✋ ${results.length} hands detected`);
     predictions = results;
   });
 
-  // setup sound
   osc = new p5.Oscillator();
   reverb = new p5.Reverb();
   osc.connect(reverb);
   cal_scaleNotes();
 
-  //imageMode(CENTER);
-
+  bird = new Bird();
+  pipes.push(new Pipe());
 }
 
 function draw() {
-  background("blue");
-  image(video, 0, 0, width, height);
+  background(0);
 
-  // draw different parts of the prediction
   predictions.forEach((hand, i) => {
-    if (p.keyPoints) drawKeypoints(hand, i);
-    if (p.skeleton) drawSkeleton(hand, i);
-    if (p.info) drawInfo(hand, i);
+    drawKeypoints(hand, i);
+    drawSkeleton(hand, i);
   });
 
-  // debug info
-  // drawFps();
-
-  
-  // process
   predictions.forEach((hand, i) => {
     process(hand, i);
   });
 
+  // 控制鸟的高度和大小
+  bird.y = map(pitch, 60, 1200, height, 0, true);
+  bird.r = map(volume, 0, 1, 10, 40);
 
-  image(img, 0, 0, 700, 700);
+  bird.show();
+  bird.update();
+
+  // 管道逻辑
+  if (frameCount % 100 === 0) {
+    pipes.push(new Pipe());
+  }
+
+  for (let i = pipes.length - 1; i >= 0; i--) {
+    pipes[i].show();
+    pipes[i].update();
+
+    // 仍然可以保留碰撞检测逻辑作为 debug 使用
+    if (pipes[i].hits(bird)) {
+      // console.log("💥 hit!");
+    }
+
+    if (pipes[i].offscreen()) {
+      pipes.splice(i, 1);
+    }
+  }
+
+  // 绘制参考图
+  let imgSize = width * 0.15;
+  image(img, width - imgSize - 10, height - imgSize - 10, imgSize, imgSize);
 }
 
-function process(hand, i){
-  // get average position of all keypoints
+function process(hand, i) {
   const avg = hand.keypoints.reduce(
     (acc, kp) => {
       acc.x += kp.x;
@@ -141,66 +138,115 @@ function process(hand, i){
   );
   avg.x /= hand.keypoints.length;
   avg.y /= hand.keypoints.length;
-  
-  // get the main landmarks
+
   if (hand.handedness == "Left") {
-    volume = (height-avg.y)/height;
+    volume = (height - avg.y) / height;
   }
   if (hand.handedness == "Right") {
     let targetPitch = (avg.x - 300) * 1500 / 600 + 65;
     targetPitch = quantizeToScale(targetPitch, scaleFreqs);
-    let targetNode = freqToMidi(targetPitch);
-    fill(255);
-    stroke(0);
-    textSize(32);
-    text("Notes: " + targetNode, width/2-100, 50);
-    // 使用 lerp 让 pitch 平滑过渡到目标音高
-    pitch = lerp(pitch, targetPitch, 0.1); // 0.1 控制变化速度，值越小越平滑
+    pitch = lerp(pitch, targetPitch, 0.1);
   }
-  
-  // console.log("Volume: ", volume);
-  // console.log("Pitch: ", pitch);
+
   if (playing) {
     osc.amp(volume);
     osc.freq(pitch);
   }
 }
 
+function keyPressed() {
+  if (key == " ") {
+    osc.amp(0.5);
+    osc.freq(440);
+    osc.start();
+    playing = true;
+    // 不再重置 bird 和管道
+  }
+}
 
+
+function windowResized() {
+  let w = windowWidth;
+  let h = w * 3 / 4;
+  resizeCanvas(w, h);
+  video.size(w, h);
+}
+
+// Bird 类
+class Bird {
+  constructor() {
+    this.y = height / 2;
+    this.x = 100;
+    this.r = 20;
+    this.gravity = 0.7;
+    this.velocity = 0;
+  }
+
+  show() {
+    fill(255, 255, 0);
+    noStroke();
+    ellipse(this.x, this.y, this.r, this.r);
+  }
+
+  update() {
+    this.velocity += this.gravity;
+    this.y += this.velocity;
+    this.y = constrain(this.y, 0, height);
+  }
+}
+
+// Pipe 类
+class Pipe {
+  constructor() {
+    this.top = random(height / 6, height / 2);
+    this.bottom = height - this.top - random(100, 200);
+    this.x = width;
+    this.w = 50;
+    this.speed = 3;
+  }
+
+  show() {
+    fill(0, 255, 0);
+    noStroke();
+    rect(this.x, 0, this.w, this.top);
+    rect(this.x, height - this.bottom, this.w, this.bottom);
+  }
+
+  update() {
+    this.x -= this.speed;
+  }
+
+  offscreen() {
+    return this.x < -this.w;
+  }
+
+  hits(bird) {
+    let withinX = bird.x + bird.r / 2 > this.x && bird.x - bird.r / 2 < this.x + this.w;
+    let hitsTop = bird.y - bird.r / 2 < this.top;
+    let hitsBottom = bird.y + bird.r / 2 > height - this.bottom;
+    return withinX && (hitsTop || hitsBottom);
+  }
+}
 
 const colours = [
-  "Red",
-  "OrangeRed",
-  "Gold",
-  "Lime",
-  "Turquoise",
-  "DodgerBlue",
-  "Blue",
-  "DarkMagenta",
+  "Red", "OrangeRed", "Gold", "Lime", "Turquoise", "DodgerBlue", "Blue", "DarkMagenta"
 ];
 
-// Draw dots for all detected landmarks
 function drawKeypoints(hand, i) {
   const c = color(colours[i % colours.length]);
   fill(c);
   noStroke();
-
   hand.keypoints.forEach((kp) => {
     circle(kp.x, kp.y, 10);
   });
-
 }
 
-// Draw lines between certain main keypoints
 function drawSkeleton(hand, i) {
   const c = color(colours[i % colours.length]);
   stroke(c);
   strokeWeight(2);
   noFill();
-
-  // get lookup table for connections
   const connections = model.getConnections();
-
   connections.forEach((c) => {
     const [i, j] = c;
     const a = hand.keypoints[i];
@@ -208,53 +254,3 @@ function drawSkeleton(hand, i) {
     line(a.x, a.y, b.x, b.y);
   });
 }
-
-function drawInfo(hand, i) {
-  // get average position of all keypoints
-  const avg = hand.keypoints.reduce(
-    (acc, kp) => {
-      acc.x += kp.x;
-      acc.y += kp.y;
-      return acc;
-    },
-    { x: 0, y: 0 }
-  );
-  avg.x /= hand.keypoints.length;
-  avg.y /= hand.keypoints.length;
-
-  const c = color(colours[i % colours.length]);
-  stroke("white");
-  strokeWeight(4);
-  fill(c);
-
-  // draw information
-  textAlign(CENTER, CENTER);
-  textSize(32);
-  text(hand.handedness, avg.x, avg.y);
-  text(hand.confidence.toFixed(2), avg.x, avg.y + 36);
-
-}
-
-
-
-function drawFps() {
-  // calculate FPS
-  let fps = frameRate();
-  fill(255);
-  stroke(0);
-  text("FPS: " + fps.toFixed(2), 10, height - 10);
-}
-
-function keyPressed() {
-  // dump the predictions to the console
-  if (key == " ") {
-    console.log(predictions);
-    osc.amp(0.5);
-    osc.freq(440);
-    osc.start();
-    playing = true;
-  }
-}
-
-// global callback from the settings GUI
-function paramChanged(name) {}
