@@ -5,19 +5,23 @@ let osc, playing, freq, amp;
 let reverb;
 let scaleNotes = [];
 let scaleFreqs = [];
-let noteDiffs = [2, 3, 4, 5, 6, 7, 9, 11, 12]; // Major b3 #4
-let basicNote = 5; // F
+let noteDiffs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; // Major b3 #4
+let basicNote = 1; // F
+
+// parameters 
+
 
 // the HandPose model
 let model;
 let predictions = [];
 let video;
-let img;
+// let img;
 
 // flappy bird game
 let bird;
 let pipes = [];
 // let gameOver = false;
+let bg;
 
 function preload() {
   model = ml5.handPose(
@@ -30,7 +34,8 @@ function preload() {
       console.log("🚀 model loaded");
     }
   );
-  img = loadImage("theremin.png");
+  // img = loadImage("theremin.png");
+  bg = loadImage("./assets/flappy_background.png");
 }
 
 function cal_scaleNotes() {
@@ -62,9 +67,10 @@ function quantizeToScale(freq, scale) {
   return quantizedFreq;
 }
 
+let w, h;
 function setup() {
-  let w = windowWidth;
-  let h = w * 3 / 4;
+  w = windowWidth;
+  h = windowHeight;
   createCanvas(w, h);
 
   video = createCapture(VIDEO, { flipped: true });
@@ -74,6 +80,9 @@ function setup() {
   model.detectStart(video, (results) => {
     predictions = results;
   });
+
+  // 
+  
 
   osc = new p5.Oscillator();
   reverb = new p5.Reverb();
@@ -85,7 +94,20 @@ function setup() {
 }
 
 function draw() {
-  background(0);
+  let canvasRatio = width / height;
+  let imgRatio = bg.width / bg.height;
+  let drawWidth, drawHeight;
+  
+  if (imgRatio > canvasRatio) {
+    drawHeight = height;
+    drawWidth = bg.width * (height / bg.height);
+  } else {
+    drawWidth = width;
+    drawHeight = bg.height * (width / bg.width);
+  }
+  
+  imageMode(CENTER);
+  image(bg, width / 2, height / 2, drawWidth, drawHeight);
 
   predictions.forEach((hand, i) => {
     drawKeypoints(hand, i);
@@ -97,7 +119,7 @@ function draw() {
   });
 
   // 控制鸟的高度和大小
-  bird.y = map(pitch, 60, 1200, height, 0, true);
+  bird.y = map(pitch, 220, 1200, height, 0, true);
   bird.r = map(volume, 0, 1, 10, 40);
 
   bird.show();
@@ -123,8 +145,8 @@ function draw() {
   }
 
   // 绘制参考图
-  let imgSize = width * 0.15;
-  image(img, width - imgSize - 10, height - imgSize - 10, imgSize, imgSize);
+  // let imgSize = width * 0.15;
+  // image(img, width - imgSize - 10, height - imgSize - 10, imgSize, imgSize);
 }
 
 function process(hand, i) {
@@ -140,10 +162,10 @@ function process(hand, i) {
   avg.y /= hand.keypoints.length;
 
   if (hand.handedness == "Left") {
-    volume = (height - avg.y) / height;
+    volume = (h - avg.y) / height;
   }
   if (hand.handedness == "Right") {
-    let targetPitch = (avg.x - 300) * 1500 / 600 + 65;
+    let targetPitch = (avg.x - windowWidth/2) * 1500 / (windowWidth/2) + 65;
     targetPitch = quantizeToScale(targetPitch, scaleFreqs);
     pitch = lerp(pitch, targetPitch, 0.1);
   }
@@ -183,7 +205,7 @@ class Bird {
   }
 
   show() {
-    fill(255, 255, 0);
+    fill(255, 100, 0);
     noStroke();
     ellipse(this.x, this.y, this.r, this.r);
   }
@@ -206,7 +228,7 @@ class Pipe {
   }
 
   show() {
-    fill(0, 255, 0);
+    fill(0, 100, 255);
     noStroke();
     rect(this.x, 0, this.w, this.top);
     rect(this.x, height - this.bottom, this.w, this.bottom);
