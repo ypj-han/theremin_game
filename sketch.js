@@ -119,7 +119,7 @@ function draw() {
   });
 
   // 控制鸟的高度和大小
-  bird.y = map(pitch, 220, 1200, height, 0, true);
+  bird.x = map(pitch, 220, 1200, 0, width, true);
   bird.r = map(volume, 0, 1, 10, 40);
 
   bird.show();
@@ -152,8 +152,12 @@ function draw() {
 function process(hand, i) {
   const avg = hand.keypoints.reduce(
     (acc, kp) => {
-      acc.x += kp.x;
-      acc.y += kp.y;
+      if (hand.handedness == "Left") {
+        acc.y += kp.y;
+      }
+      if (hand.handedness == "Right") {
+        acc.x += kp.x;
+      }
       return acc;
     },
     { x: 0, y: 0 }
@@ -162,7 +166,7 @@ function process(hand, i) {
   avg.y /= hand.keypoints.length;
 
   if (hand.handedness == "Left") {
-    volume = (h - avg.y) / height;
+    volume = (windowHeight - avg.y) / windowHeight;
   }
   if (hand.handedness == "Right") {
     let targetPitch = (avg.x - windowWidth/2) * 1500 / (windowWidth/2) + 65;
@@ -177,7 +181,7 @@ function process(hand, i) {
 }
 
 function keyPressed() {
-  if (key == " ") {
+  if (key == " " && !playing) {
     osc.amp(0.5);
     osc.freq(440);
     osc.start();
@@ -197,8 +201,8 @@ function windowResized() {
 // Bird 类
 class Bird {
   constructor() {
-    this.y = height / 2;
-    this.x = 100;
+    this.y = height - 100;
+    this.x = width / 2;
     this.r = 20;
     this.gravity = 0.7;
     this.velocity = 0;
@@ -212,41 +216,41 @@ class Bird {
 
   update() {
     this.velocity += this.gravity;
-    this.y += this.velocity;
-    this.y = constrain(this.y, 0, height);
+    this.x += this.velocity;
+    this.x = constrain(this.x, 0, width);
   }
 }
 
 // Pipe 类
 class Pipe {
   constructor() {
-    this.top = random(height / 6, height / 2);
-    this.bottom = height - this.top - random(100, 200);
-    this.x = width;
-    this.w = 50;
+    this.left = random(width / 6, width / 2);
+    this.right = width - this.left - random(100, 200);
+    this.y = 0;
+    this.h = 50;
     this.speed = 3;
   }
 
   show() {
     fill(0, 100, 255);
     noStroke();
-    rect(this.x, 0, this.w, this.top);
-    rect(this.x, height - this.bottom, this.w, this.bottom);
+    rect(0, this.y, this.left, this.h);
+    rect(width - this.right, this.y, this.right, this.h);
   }
 
   update() {
-    this.x -= this.speed;
+    this.y += this.speed;
   }
 
   offscreen() {
-    return this.x < -this.w;
+    return this.y > height;
   }
 
   hits(bird) {
-    let withinX = bird.x + bird.r / 2 > this.x && bird.x - bird.r / 2 < this.x + this.w;
-    let hitsTop = bird.y - bird.r / 2 < this.top;
-    let hitsBottom = bird.y + bird.r / 2 > height - this.bottom;
-    return withinX && (hitsTop || hitsBottom);
+    let withinY = bird.y + bird.r / 2 > this.y && bird.y - bird.r / 2 < this.y + this.h;
+    let hitsLeft = bird.x - bird.r / 2 < this.left;
+    let hitsRight = bird.x + bird.r / 2 > width - this.right;
+    return withinY && (hitsLeft || hitsRight);
   }
 }
 
