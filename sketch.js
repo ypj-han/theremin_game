@@ -8,20 +8,22 @@ let scaleFreqs = [];
 let noteDiffs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; // Major b3 #4
 let basicNote = 1; // F
 
-// parameters 
-
-
 // the HandPose model
 let model;
 let predictions = [];
 let video;
-// let img;
 
 // flappy bird game
 let bird;
 let pipes = [];
-// let gameOver = false;
 let bg;
+
+// midi
+let bpm = 80;
+
+function bpmToSpeed(bpm) {
+  return bpm*60/60;
+}
 
 function preload() {
   model = ml5.handPose(
@@ -34,7 +36,7 @@ function preload() {
       console.log("🚀 model loaded");
     }
   );
-  // img = loadImage("theremin.png");
+
   bg = loadImage("./assets/flappy_background.png");
 }
 
@@ -67,34 +69,33 @@ function quantizeToScale(freq, scale) {
   return quantizedFreq;
 }
 
-let w, h;
 function setup() {
-  w = windowWidth;
-  h = windowHeight;
-  createCanvas(w, h);
+  createCanvas(windowWidth, windowHeight);
 
   video = createCapture(VIDEO, { flipped: true });
-  video.size(w, h);
+  video.size(windowWidth, windowHeight);
   video.hide();
 
   model.detectStart(video, (results) => {
     predictions = results;
   });
-
-  // 
   
-
+  // sound
   osc = new p5.Oscillator();
   reverb = new p5.Reverb();
   osc.connect(reverb);
   cal_scaleNotes();
 
+  // game
   bird = new Bird();
   pipes.push(new Pipe());
+
 }
 
 function draw() {
-  let canvasRatio = width / height;
+
+  // brackground
+  let canvasRatio = windowWidth / windowHeight;
   let imgRatio = bg.width / bg.height;
   let drawWidth, drawHeight;
   
@@ -107,8 +108,9 @@ function draw() {
   }
   
   imageMode(CENTER);
-  image(bg, width / 2, height / 2, drawWidth, drawHeight);
+  image(bg, windowWidth / 2, windowHeight / 2, drawWidth, drawHeight);
 
+  // draw hands
   predictions.forEach((hand, i) => {
     drawKeypoints(hand, i);
     drawSkeleton(hand, i);
@@ -119,41 +121,47 @@ function draw() {
   });
 
   // 控制鸟的高度和大小
-  bird.x = map(pitch, 220, 1200, 0, width, true);
-  bird.r = map(volume, 0, 1, 10, 40);
+  bird.x = map(pitch, 220, 1200, 0, windowWidth, true);
+  bird.r = map(volume, 0, 1, 0, 30);
 
   bird.show();
   bird.update();
 
   // 管道逻辑
-  if (frameCount % 100 === 0) {
+  if (frameCount % 60 === 0) {
     pipes.push(new Pipe());
   }
 
   for (let i = pipes.length - 1; i >= 0; i--) {
+    pipes[i].speed = 10;
     pipes[i].show();
     pipes[i].update();
-
-    // 仍然可以保留碰撞检测逻辑作为 debug 使用
-    if (pipes[i].hits(bird)) {
-      // console.log("💥 hit!");
-    }
 
     if (pipes[i].offscreen()) {
       pipes.splice(i, 1);
     }
   }
-
-  // 绘制参考图
-  // let imgSize = width * 0.15;
-  // image(img, width - imgSize - 10, height - imgSize - 10, imgSize, imgSize);
 }
 
 function process(hand, i) {
   const avg = hand.keypoints.reduce(
     (acc, kp) => {
       if (hand.handedness == "Left") {
-        acc.y += kp.y;
+        // Calculate hand openness by averaging distances from wrist to fingertips
+        const wrist = hand.keypoints[0];
+        const fingertipIndices = [4, 8, 12, 16, 20]; // Thumb tip, index tip, middle tip, ring tip, pinky tip
+        let totalDist = 0;
+
+        fingertipIndices.forEach(index => {
+          const tip = hand.keypoints[index];
+          const dx = tip.x - wrist.x;
+          const dy = tip.y - wrist.y;
+          totalDist += Math.sqrt(dx * dx + dy * dy);
+        });
+
+        const openness = totalDist / fingertipIndices.length;
+        // Normalize openness (adjust the divisor for sensitivity)
+        volume = constrain(openness / 200, 0, 2);
       }
       if (hand.handedness == "Right") {
         acc.x += kp.x;
@@ -163,11 +171,8 @@ function process(hand, i) {
     { x: 0, y: 0 }
   );
   avg.x /= hand.keypoints.length;
-  avg.y /= hand.keypoints.length;
+  // avg.y /= hand.keypoints.length; // Removed
 
-  if (hand.handedness == "Left") {
-    volume = (windowHeight - avg.y) / windowHeight;
-  }
   if (hand.handedness == "Right") {
     let targetPitch = (avg.x - windowWidth/2) * 1500 / (windowWidth/2) + 65;
     targetPitch = quantizeToScale(targetPitch, scaleFreqs);
@@ -186,23 +191,14 @@ function keyPressed() {
     osc.freq(440);
     osc.start();
     playing = true;
-    // 不再重置 bird 和管道
   }
-}
-
-
-function windowResized() {
-  let w = windowWidth;
-  let h = w * 3 / 4;
-  resizeCanvas(w, h);
-  video.size(w, h);
 }
 
 // Bird 类
 class Bird {
   constructor() {
-    this.y = height - 100;
-    this.x = width / 2;
+    this.y = windowHeight - 100;
+    this.x = windowWidth / 2;
     this.r = 20;
     this.gravity = 0.7;
     this.velocity = 0;
@@ -217,15 +213,15 @@ class Bird {
   update() {
     this.velocity += this.gravity;
     this.x += this.velocity;
-    this.x = constrain(this.x, 0, width);
+    this.x = constrain(this.x, 0, windowWidth);
   }
 }
 
 // Pipe 类
 class Pipe {
   constructor() {
-    this.left = random(width / 6, width / 2);
-    this.right = width - this.left - random(100, 200);
+    this.left = random(windowWidth / 6, windowWidth / 2);
+    this.right = windowWidth - this.left - random(100, 200);
     this.y = 0;
     this.h = 50;
     this.speed = 3;
@@ -235,7 +231,7 @@ class Pipe {
     fill(0, 100, 255);
     noStroke();
     rect(0, this.y, this.left, this.h);
-    rect(width - this.right, this.y, this.right, this.h);
+    rect(windowWidth - this.right, this.y, this.right, this.h);
   }
 
   update() {
@@ -243,15 +239,9 @@ class Pipe {
   }
 
   offscreen() {
-    return this.y > height;
+    return this.y > windowHeight;
   }
 
-  hits(bird) {
-    let withinY = bird.y + bird.r / 2 > this.y && bird.y - bird.r / 2 < this.y + this.h;
-    let hitsLeft = bird.x - bird.r / 2 < this.left;
-    let hitsRight = bird.x + bird.r / 2 > width - this.right;
-    return withinY && (hitsLeft || hitsRight);
-  }
 }
 
 const colours = [
