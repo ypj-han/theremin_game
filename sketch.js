@@ -6,7 +6,7 @@ let reverb;
 let scaleNotes = [];
 let scaleFreqs = [];
 let noteDiffs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; // Major b3 #4
-let basicNote = 1; // F
+let basicNote = 0; // F
 
 // the HandPose model
 let model;
@@ -27,7 +27,15 @@ let frequencies = [];
 let f_x = [];
 let times = [];
 
+let pipeIndex = 0;
+let startTime = 0;
+let playPipes = false;
 
+let freq_up = 1550;
+let freq_down = 500;
+
+let sensitivity = 2000;
+let freq_low = 200;
 
 function bpmToSpeed(bpm) {
   return bpm*60/60;
@@ -77,7 +85,6 @@ function quantizeToScale(freq, scale) {
   }
   return quantizedFreq;
 }
-
 function setup() {
   createCanvas(windowWidth, windowHeight);
 
@@ -88,43 +95,36 @@ function setup() {
   model.detectStart(video, (results) => {
     predictions = results;
   });
-  
-  // sound
+
   osc = new p5.Oscillator();
   reverb = new p5.Reverb();
   osc.connect(reverb);
   reverb.connect();
-  
 
   cal_scaleNotes();
 
-  loadTable("./python/midi_time_output.csv", "csv", "header", function(table) {
+  loadTable("./python/midi_time_output.csv", "csv", "header", function (table) {
     for (let r = 0; r < table.getRowCount(); r++) {
       const midi = table.getNum(r, "midi");
       const time = table.getNum(r, "time");
       let freq = midiToFreq(midi);
-      let x = map(freq, 400, 1700, 0, windowWidth, true);
-      frequencies.push(midiToFreq(midi));
+      let x = map(freq, freq_down, freq_up, 0, windowWidth, true);
+      frequencies.push(freq);
       f_x.push(x);
       times.push(time);
     }
     console.log("🎵 frequencies loaded:", frequencies.length);
-  });
+  }); 
 
-  
-  // game
   bird = new Bird();
-  pipes.push(new Pipe());
-
 }
 
 function draw() {
-
-  // brackground
+  // 背景绘制
   let canvasRatio = windowWidth / windowHeight;
   let imgRatio = bg.width / bg.height;
   let drawWidth, drawHeight;
-  
+
   if (imgRatio > canvasRatio) {
     drawHeight = height;
     drawWidth = bg.width * (height / bg.height);
@@ -132,30 +132,30 @@ function draw() {
     drawWidth = width;
     drawHeight = bg.height * (width / bg.width);
   }
-  
+
   imageMode(CENTER);
   image(bg, windowWidth / 2, windowHeight / 2, drawWidth, drawHeight);
 
-  // draw hands
   predictions.forEach((hand, i) => {
     drawKeypoints(hand, i);
     drawSkeleton(hand, i);
-  });
-
-  predictions.forEach((hand, i) => {
     process(hand, i);
   });
 
-  // 控制鸟的高度和大小
   bird.x = map(pitch, 400, 1700, 0, windowWidth, true);
   bird.r = map(volume, 0, 1, 0, 30);
-
   bird.show();
   bird.update();
 
-  // 管道逻辑
-  if (frameCount % 60 === 0) {
-    pipes.push(new Pipe());
+
+  if (playPipes) {
+    let currentTime = (millis() - startTime) / 1000;
+
+    while (pipeIndex < times.length && currentTime >= times[pipeIndex]-1.1) {
+      pipes.push(new Pipe(f_x[pipeIndex]));
+
+      pipeIndex++;
+    }
   }
 
   for (let i = pipes.length - 1; i >= 0; i--) {
@@ -168,6 +168,8 @@ function draw() {
     }
   }
 }
+
+
 
 function process(hand, i) {
   const avg = hand.keypoints.reduce(
@@ -200,9 +202,9 @@ function process(hand, i) {
   // avg.y /= hand.keypoints.length; // Removed
 
   if (hand.handedness == "Right") {
-    let targetPitch = (avg.x - windowWidth/2) * 1500 / (windowWidth/2) + 65;
+    let targetPitch = (avg.x - windowWidth/2) * sensitivity / (windowWidth/2) + freq_low;
     targetPitch = quantizeToScale(targetPitch, scaleFreqs);
-    pitch = lerp(pitch, targetPitch, 0.1);
+    pitch = lerp(pitch, targetPitch, 0.2);
   }
 
   if (playing) {
@@ -212,7 +214,6 @@ function process(hand, i) {
 }
 
 function keyPressed() {
-  // 确保音频上下文已启动
   userStartAudio();
 
   if (key == " " && !playing) {
@@ -222,7 +223,9 @@ function keyPressed() {
     playing = true;
   }
 
-  if (key == "p"){
+  if (key == "p") {
+    startTime = millis();
+    playPipes = true;
     orb.play();
   }
 }
@@ -249,12 +252,10 @@ class Bird {
     this.x = constrain(this.x, 0, windowWidth);
   }
 }
-
-// Pipe 类
 class Pipe {
-  constructor() {
-    this.left = random(windowWidth / 6, windowWidth / 2);
-    this.right = windowWidth - this.left - random(100, 200);
+  constructor(xPos) {
+    this.left = xPos !== undefined ? xPos : random(windowWidth / 6, windowWidth / 2);
+    this.right = windowWidth - this.left - random(50, 100);
     this.y = 0;
     this.h = 50;
     this.speed = 3;
@@ -274,8 +275,8 @@ class Pipe {
   offscreen() {
     return this.y > windowHeight;
   }
-
 }
+
 
 const colours = [
   "Red", "OrangeRed", "Gold", "Lime", "Turquoise", "DodgerBlue", "Blue", "DarkMagenta"
