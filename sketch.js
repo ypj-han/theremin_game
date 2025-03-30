@@ -19,7 +19,15 @@ let pipes = [];
 let bg;
 
 // midi
-let bpm = 80;
+let bpm = 88;
+
+// 
+let orb;
+let frequencies = [];
+let f_x = [];
+let times = [];
+
+
 
 function bpmToSpeed(bpm) {
   return bpm*60/60;
@@ -38,6 +46,7 @@ function preload() {
   );
 
   bg = loadImage("./assets/flappy_background.png");
+  orb = loadSound("./assets/overtherainbow.wav");
 }
 
 function cal_scaleNotes() {
@@ -84,8 +93,25 @@ function setup() {
   osc = new p5.Oscillator();
   reverb = new p5.Reverb();
   osc.connect(reverb);
+  reverb.connect();
+  
+
   cal_scaleNotes();
 
+  loadTable("./python/midi_time_output.csv", "csv", "header", function(table) {
+    for (let r = 0; r < table.getRowCount(); r++) {
+      const midi = table.getNum(r, "midi");
+      const time = table.getNum(r, "time");
+      let freq = midiToFreq(midi);
+      let x = map(freq, 400, 1700, 0, windowWidth, true);
+      frequencies.push(midiToFreq(midi));
+      f_x.push(x);
+      times.push(time);
+    }
+    console.log("🎵 frequencies loaded:", frequencies.length);
+  });
+
+  
   // game
   bird = new Bird();
   pipes.push(new Pipe());
@@ -121,7 +147,7 @@ function draw() {
   });
 
   // 控制鸟的高度和大小
-  bird.x = map(pitch, 220, 1200, 0, windowWidth, true);
+  bird.x = map(pitch, 400, 1700, 0, windowWidth, true);
   bird.r = map(volume, 0, 1, 0, 30);
 
   bird.show();
@@ -161,7 +187,7 @@ function process(hand, i) {
 
         const openness = totalDist / fingertipIndices.length;
         // Normalize openness (adjust the divisor for sensitivity)
-        volume = constrain(openness / 200, 0, 2);
+        volume = constrain(openness / 200, 0, 2) / 2;
       }
       if (hand.handedness == "Right") {
         acc.x += kp.x;
@@ -186,11 +212,18 @@ function process(hand, i) {
 }
 
 function keyPressed() {
+  // 确保音频上下文已启动
+  userStartAudio();
+
   if (key == " " && !playing) {
     osc.amp(0.5);
     osc.freq(440);
     osc.start();
     playing = true;
+  }
+
+  if (key == "p"){
+    orb.play();
   }
 }
 
