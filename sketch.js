@@ -18,8 +18,11 @@ let bird;
 let pipes = [];
 let bg;
 
+
+
 // midi
-let bpm = 88;
+let playspeed = 0.5;
+let bpm = 88 * playspeed;
 
 // 
 let orb;
@@ -34,8 +37,9 @@ let playPipes = false;
 let freq_up = 1550;
 let freq_down = 500;
 
-let sensitivity = 2000;
+let sensitivity = 3000;
 let freq_low = 200;
+
 
 function bpmToSpeed(bpm) {
   return bpm*60/60;
@@ -54,7 +58,7 @@ function preload() {
   );
 
   bg = loadImage("./assets/flappy_background.png");
-  orb = loadSound("./assets/overtherainbow.wav");
+  orb = loadSound("./assets/untitled.wav");
 }
 
 function cal_scaleNotes() {
@@ -111,7 +115,7 @@ function setup() {
       let x = map(freq, freq_down, freq_up, 0, windowWidth, true);
       frequencies.push(freq);
       f_x.push(x);
-      times.push(time);
+      times.push(time/playspeed);
     }
     console.log("🎵 frequencies loaded:", frequencies.length);
   }); 
@@ -142,7 +146,7 @@ function draw() {
     process(hand, i);
   });
 
-  bird.x = map(pitch, 400, 1700, 0, windowWidth, true);
+  bird.x = map(pitch, freq_down, freq_up, 0, windowWidth, true);
   bird.r = map(volume, 0, 1, 0, 30);
   bird.show();
   bird.update();
@@ -167,6 +171,21 @@ function draw() {
       pipes.splice(i, 1);
     }
   }
+
+    // 频率显示
+    fill(255);
+    stroke(0);
+    strokeWeight(3);
+    textSize(24);
+    textAlign(LEFT, TOP);
+  
+    let currentFreqText = "Current Pitch Frequency: " + pitch.toFixed(2) + " Hz";
+    let targetFreqText = "Target Pipe Frequency: " + 
+      (pipeIndex < frequencies.length ? frequencies[pipeIndex].toFixed(2) + " Hz" : "N/A");
+  
+    text(currentFreqText, 10, 10);
+    text(targetFreqText, 10, 40);
+  
 }
 
 
@@ -203,8 +222,9 @@ function process(hand, i) {
 
   if (hand.handedness == "Right") {
     let targetPitch = (avg.x - windowWidth/2) * sensitivity / (windowWidth/2) + freq_low;
-    targetPitch = quantizeToScale(targetPitch, scaleFreqs);
-    pitch = lerp(pitch, targetPitch, 0.2);
+    // targetPitch = quantizeToScale(targetPitch, scaleFreqs);
+    targetPitch = quantizeToScale(targetPitch, frequencies);
+    pitch = lerp(pitch, targetPitch, 0.05);
   }
 
   if (playing) {
@@ -226,6 +246,7 @@ function keyPressed() {
   if (key == "p") {
     startTime = millis();
     playPipes = true;
+    // orb.rate(playspeed);
     orb.play();
   }
 }
@@ -252,10 +273,14 @@ class Bird {
     this.x = constrain(this.x, 0, windowWidth);
   }
 }
+
 class Pipe {
-  constructor(xPos) {
-    this.left = xPos !== undefined ? xPos : random(windowWidth / 6, windowWidth / 2);
-    this.right = windowWidth - this.left - random(50, 100);
+  constructor(xCenter) {
+    // 中间空隙的中心位置由 xCenter 决定
+    let gapWidth = 100;//random(80, 120); // 空隙宽度可以根据需要调节
+    this.gapLeft = xCenter - gapWidth / 2;
+    this.gapRight = xCenter + gapWidth / 2;
+
     this.y = 0;
     this.h = 50;
     this.speed = 3;
@@ -264,8 +289,10 @@ class Pipe {
   show() {
     fill(0, 100, 255);
     noStroke();
-    rect(0, this.y, this.left, this.h);
-    rect(windowWidth - this.right, this.y, this.right, this.h);
+    // 左侧障碍物
+    rect(0, this.y, this.gapLeft, this.h);
+    // 右侧障碍物
+    rect(this.gapRight, this.y, windowWidth - this.gapRight, this.h);
   }
 
   update() {
@@ -276,6 +303,7 @@ class Pipe {
     return this.y > windowHeight;
   }
 }
+
 
 
 const colours = [
