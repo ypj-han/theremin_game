@@ -96,6 +96,8 @@ function quantizeToScale(freq, scale) {
 
 // star
 let stars = [];
+let moonRadius = 50;
+let moonTargetRadius = 50;
 
 function initStars() {
   for (let i = 0; i < 80; i++) {
@@ -117,7 +119,40 @@ function drawStars(currentTime) {
     ellipse(star.x, star.y, star.size);
   }
 }
+let moon_x = 350;
+let moon_y = 190;
 
+function drawMoon(currentTime) {
+  let closestTime = null;
+  let minDiff = Infinity;
+
+  for (let t of times) {
+    let d = abs(currentTime - t);
+    if (d < minDiff) {
+      minDiff = d;
+      closestTime = t;
+    }
+  }
+
+  // 控制目标半径：靠近触发时目标变大
+  if (minDiff < 0.2) {
+    moonTargetRadius = 150;
+  } else {
+    moonTargetRadius = 50;
+  }
+
+  // 平滑变化月亮半径
+  moonRadius = lerp(moonRadius, moonTargetRadius, 0.1);
+
+  // 绘制模糊效果（使用多个透明圆模拟模糊边缘）
+  noStroke();
+  for (let i = 5; i >= 1; i--) {
+    fill(255, 255, 255, 20 * i);
+    ellipse(moon_x, moon_y, moonRadius + i * 15);
+  }
+  fill(255, 255, 255, 180);
+  ellipse(moon_x, moon_y, moonRadius);
+}
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -189,6 +224,8 @@ function draw() {
   noTint();
 
   drawStars(currentTime);
+
+  drawMoon(currentTime);
 
   predictions.forEach((hand, i) => {
     drawKeypoints(hand, i);
