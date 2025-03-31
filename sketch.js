@@ -92,6 +92,33 @@ function quantizeToScale(freq, scale) {
   }
   return quantizedFreq;
 }
+
+
+// star
+let stars = [];
+
+function initStars() {
+  for (let i = 0; i < 80; i++) {
+    stars.push({
+      x: random(width),
+      y: random(height / 2),
+      size: random(4, 8),
+      time: random(times), // 随机选一个 time 让它亮
+    });
+  }
+}
+
+function drawStars(currentTime) {
+  for (let star of stars) {
+    let d = abs(currentTime - star.time);
+    let brightness = map(d, 0, 2, 255, 0, true); // 距离2秒内亮度渐变
+    fill(255, 255, 255, brightness);
+    noStroke();
+    ellipse(star.x, star.y, star.size);
+  }
+}
+
+
 function setup() {
   createCanvas(windowWidth, windowHeight);
 
@@ -135,6 +162,8 @@ function setup() {
   bird = new Bird();
 
   colorMode(HSL, 360, 100, 100, 255);
+
+  initStars();
 }
 
 function draw() {
@@ -151,8 +180,15 @@ function draw() {
     drawHeight = bg.height * (width / bg.width);
   }
 
+  let currentTime = (millis() - startTime) / 1000;
+  let minTimeDiff = times.length > 0 ? min(times.map(t => abs(t - currentTime))) : 9999;
+  let bgAlpha = map(minTimeDiff, 0, 2, 180, 80, true); // 背景亮度根据最近事件调整
+  tint(255, bgAlpha);
   imageMode(CENTER);
   image(bg, windowWidth / 2, windowHeight / 2, drawWidth, drawHeight);
+  noTint();
+
+  drawStars(currentTime);
 
   predictions.forEach((hand, i) => {
     drawKeypoints(hand, i);
