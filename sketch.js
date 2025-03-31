@@ -43,6 +43,10 @@ let freq_down = 500;
 let sensitivity = 3000;
 let freq_low = 200;
 
+let hint_flag = true;
+
+let bgNoiseOffset = 0;
+
 
 function bpmToSpeed(bpm) {
   return bpm*60/60;
@@ -96,8 +100,8 @@ function quantizeToScale(freq, scale) {
 
 // star
 let stars = [];
-let moonRadius = 50;
-let moonTargetRadius = 50;
+let moonRadius = 250;
+let moonTargetRadius = 250;
 
 function initStars() {
   for (let i = 0; i < 80; i++) {
@@ -119,8 +123,8 @@ function drawStars(currentTime) {
     ellipse(star.x, star.y, star.size);
   }
 }
-let moon_x = 350;
-let moon_y = 190;
+let moon_x = 740;
+let moon_y = 240;
 
 function drawMoon(currentTime) {
   let closestTime = null;
@@ -150,7 +154,7 @@ function drawMoon(currentTime) {
     fill(255, 255, 255, 20 * i);
     ellipse(moon_x, moon_y, moonRadius + i * 15);
   }
-  fill(255, 255, 255, 180);
+  fill(255, 255, 255, 300);
   ellipse(moon_x, moon_y, moonRadius);
 }
 
@@ -215,18 +219,24 @@ function draw() {
     drawHeight = bg.height * (width / bg.width);
   }
 
-  let currentTime = (millis() - startTime) / 1000;
-  let minTimeDiff = times.length > 0 ? min(times.map(t => abs(t - currentTime))) : 9999;
-  let bgAlpha = map(minTimeDiff, 0, 2, 180, 80, true); // 背景亮度根据最近事件调整
+  // 使用 Perlin noise 和 sin 叠加实现低频背景闪烁
+  bgNoiseOffset += 0.005; // 控制闪烁频率
+  let noiseBrightness = noise(bgNoiseOffset); // 0~1
+  let sinBrightness = sin(frameCount * 0.01) * 0.5 + 0.5; // 0~1
+  let flicker = (noiseBrightness * 0.6 + sinBrightness * 0.4); // 混合值
+
+  let bgAlpha = map(flicker, 0, 1, 0, 300); // 最暗 80，最亮 180
   tint(255, bgAlpha);
   imageMode(CENTER);
   image(bg, windowWidth / 2, windowHeight / 2, drawWidth, drawHeight);
   noTint();
 
-  drawStars(currentTime);
+  let currentTime = (millis() - startTime) / 1000;
 
+  drawStars(currentTime);
   drawMoon(currentTime);
 
+  
   predictions.forEach((hand, i) => {
     drawKeypoints(hand, i);
     drawSkeleton(hand, i);
@@ -259,6 +269,31 @@ function draw() {
     }
   }
 
+  if (hint_flag) {
+    fill(255);
+    stroke(0);
+    strokeWeight(3);
+    textSize(24);
+    textAlign(LEFT, TOP);
+
+    let hint0_text = "Tutorial:";
+    let hint1_text = "1. Press 'Space' to open your theremin!";
+    let hint2_text = "2. Move your right hand, and open(Close) your left hand to see what will happens.";
+    let hint3_text = "3. When you get ready, Press 'P' to play the accompany!";
+    let hint4_text = "4. Open your fingers according to the moon, move your right hand to pass through the white pipes!";
+    let hint5_text = "5. Press 'H' to hide the hints.";
+    let hint6_text = "6. Press 'CMD + R' to reset the game.";
+
+    text(hint0_text, 10, 10);
+    text(hint1_text, 10, 40);
+    text(hint2_text, 10, 70);
+    text(hint3_text, 10, 100);
+    text(hint4_text, 10, 130);
+    text(hint5_text, 10, 160);
+    text(hint6_text, 10, 190);
+  
+  }
+
     // 频率显示
     // fill(255);
     // stroke(0);
@@ -273,6 +308,7 @@ function draw() {
     // text(currentFreqText, 10, 10);
     // text(targetFreqText, 10, 40);
   
+
 }
 
 
@@ -336,6 +372,10 @@ function keyPressed() {
     playPipes = true;
     // orb.rate(playspeed);
     orb.play();
+  }
+
+  if (key == "h") {
+    hint_flag = !hint_flag;
   }
 }
 
@@ -432,43 +472,27 @@ const colours = [
 ];
 
 function drawKeypoints(hand, i) {
-  const c = color(colours[i % colours.length]);
-  fill(c);
   noStroke();
-  hand.keypoints.forEach((kp) => {
-    circle(kp.x, kp.y, 10);
-  });
+  for (let kp of hand.keypoints) {
+    let glow = 20;
+    fill(255, 255, 255, 80); // 外层光晕
+    ellipse(kp.x, kp.y, 20 + glow);
+    fill(255); // 中心发亮
+    ellipse(kp.x, kp.y, 20);
+  }
 }
 
 function drawSkeleton(hand, i) {
-  const c = color(colours[i % colours.length]);
+  const c = color(255); // 你也可以用 pastel 粉、亮蓝、亮紫这些“梦幻卡通色”
   stroke(c);
-  strokeWeight(10); // 加粗线条
-  strokeJoin(ROUND);
+  strokeWeight(16); // 粗线
   strokeCap(ROUND);
+  strokeJoin(ROUND);
 
   const connections = model.getConnections();
-  connections.forEach((c) => {
-    const [i, j] = c;
-    const a = hand.keypoints[i];
-    const b = hand.keypoints[j];
-    line(a.x, a.y, b.x, b.y);
-  });
-
-  // 手掌关键点大圆点（胖胖的感觉）
-  noStroke();
-  fill(255);
-  const palmIndices = [0, 1, 5, 9, 13, 17];
-  palmIndices.forEach(index => {
-    const kp = hand.keypoints[index];
-    ellipse(kp.x, kp.y, 22); // 加粗圆点
-  });
-
-  // 指尖圆圈增强“手套”感
-  const tipIndices = [4, 8, 12, 16, 20];
-  tipIndices.forEach(index => {
-    const kp = hand.keypoints[index];
-    fill(255);
-    ellipse(kp.x, kp.y, 18);
+  connections.forEach(([a, b]) => {
+    const p1 = hand.keypoints[a];
+    const p2 = hand.keypoints[b];
+    line(p1.x, p1.y, p2.x, p2.y);
   });
 }
