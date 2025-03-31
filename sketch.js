@@ -108,7 +108,7 @@ function setup() {
   delay = new p5.Delay(0.12, 0.7);
   filter = new p5.LowPass();
   filter.freq(1500);
-  reverb.set(0.1);
+  reverb.set(1);
   osc.setType("sine");
 
   osc.connect(delay);
