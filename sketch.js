@@ -3,6 +3,9 @@ let volume = 0;
 let pitch = 0;
 let osc, playing, freq, amp;
 let reverb;
+let delay;
+let filter;
+
 let scaleNotes = [];
 let scaleFreqs = [];
 let noteDiffs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; // Major b3 #4
@@ -57,7 +60,7 @@ function preload() {
     }
   );
 
-  bg = loadImage("./assets/flappy_background.png");
+  bg = loadImage("./assets/castle.jpg");
   orb = loadSound("./assets/untitled.wav");
 }
 
@@ -68,7 +71,7 @@ function cal_scaleNotes() {
   while (note < 119) {
     note = basicNote + noteDiffs[i] + j * 12;
     scaleNotes.push(note);
-    scaleFreqs.push(midiToFreq(note));
+    // scaleFreqs.push(midiToFreq(note));
     i++;
     if (i == noteDiffs.length) {
       i = 0;
@@ -102,8 +105,16 @@ function setup() {
 
   osc = new p5.Oscillator();
   reverb = new p5.Reverb();
-  osc.connect(reverb);
-  reverb.connect();
+  delay = new p5.Delay(0.12, 0.7);
+  filter = new p5.LowPass();
+  filter.freq(1500);
+  reverb.set(0.1);
+  osc.setType("sine");
+
+  osc.connect(delay);
+  delay.connect(reverb);
+  reverb.connect(filter);
+
 
   cal_scaleNotes();
 
@@ -112,6 +123,7 @@ function setup() {
       const midi = table.getNum(r, "midi");
       const time = table.getNum(r, "time");
       let freq = midiToFreq(midi);
+      scaleFreqs.push(freq);
       let x = map(freq, freq_down, freq_up, 0, windowWidth, true);
       frequencies.push(freq);
       f_x.push(x);
@@ -121,6 +133,8 @@ function setup() {
   }); 
 
   bird = new Bird();
+
+  colorMode(HSL, 360, 100, 100, 255);
 }
 
 function draw() {
@@ -173,18 +187,18 @@ function draw() {
   }
 
     // 频率显示
-    fill(255);
-    stroke(0);
-    strokeWeight(3);
-    textSize(24);
-    textAlign(LEFT, TOP);
+    // fill(255);
+    // stroke(0);
+    // strokeWeight(3);
+    // textSize(24);
+    // textAlign(LEFT, TOP);
   
-    let currentFreqText = "Current Pitch Frequency: " + pitch.toFixed(2) + " Hz";
-    let targetFreqText = "Target Pipe Frequency: " + 
-      (pipeIndex < frequencies.length ? frequencies[pipeIndex].toFixed(2) + " Hz" : "N/A");
+    // let currentFreqText = "Current Pitch Frequency: " + pitch.toFixed(2) + " Hz";
+    // let targetFreqText = "Target Pipe Frequency: " + 
+    //   (pipeIndex < frequencies.length ? frequencies[pipeIndex].toFixed(2) + " Hz" : "N/A");
   
-    text(currentFreqText, 10, 10);
-    text(targetFreqText, 10, 40);
+    // text(currentFreqText, 10, 10);
+    // text(targetFreqText, 10, 40);
   
 }
 
@@ -208,7 +222,8 @@ function process(hand, i) {
 
         const openness = totalDist / fingertipIndices.length;
         // Normalize openness (adjust the divisor for sensitivity)
-        volume = constrain(openness / 200, 0, 2) / 2;
+        volume = constrain(openness / 200-0.7, 0, 2) / 2;
+        console.log("Volume:", volume);
       }
       if (hand.handedness == "Right") {
         acc.x += kp.x;
@@ -224,7 +239,7 @@ function process(hand, i) {
     let targetPitch = (avg.x - windowWidth/2) * sensitivity / (windowWidth/2) + freq_low;
     // targetPitch = quantizeToScale(targetPitch, scaleFreqs);
     targetPitch = quantizeToScale(targetPitch, frequencies);
-    pitch = lerp(pitch, targetPitch, 0.05);
+    pitch = lerp(pitch, targetPitch, 0.08);
   }
 
   if (playing) {
@@ -251,33 +266,55 @@ function keyPressed() {
   }
 }
 
-// Bird 类
 class Bird {
   constructor() {
-    this.y = windowHeight - 100;
     this.x = windowWidth / 2;
-    this.r = 20;
-    this.gravity = 0.7;
-    this.velocity = 0;
+    this.y = windowHeight - 100;
+    this.particles = [];
   }
 
   show() {
-    fill(255, 100, 0);
-    noStroke();
-    ellipse(this.x, this.y, this.r, this.r);
+    for (let p of this.particles) {
+      fill(p.color);
+      noStroke();
+      ellipse(p.x, p.y, p.r);
+    }
   }
 
   update() {
-    this.velocity += this.gravity;
-    this.x += this.velocity;
-    this.x = constrain(this.x, 0, windowWidth);
+    this.y = windowHeight - 100; // 保持 y 恒定或你可以让它随 pitch/volume 动态变化
+    let numParticles = int(map(volume, 0, 1, 1, 3));
+
+    for (let i = 0; i < numParticles; i++) {
+      let angle = random(TWO_PI);
+      let radius = random(10, 35);
+      let px = this.x + cos(angle) * radius;
+      let py = this.y + sin(angle) * radius;
+      let hue = (frameCount * 5 + i * 10) % 360;
+      let col = color(`hsl(${hue}, 100%, 50%)`);
+      this.particles.push({
+        x: px,
+        y: py,
+        r: random(10, 20),
+        color: col,
+        lifespan: 100
+      });
+    }
+
+    for (let p of this.particles) {
+      p.lifespan -= 2;
+      p.r *= 0.98;
+      p.color.setAlpha(map(p.lifespan, 0, 100, 0, 255));
+    }
+
+    this.particles = this.particles.filter(p => p.lifespan > 0);
   }
 }
 
 class Pipe {
   constructor(xCenter) {
     // 中间空隙的中心位置由 xCenter 决定
-    let gapWidth = 100;//random(80, 120); // 空隙宽度可以根据需要调节
+    let gapWidth = 200;//random(80, 120); // 空隙宽度可以根据需要调节
     this.gapLeft = xCenter - gapWidth / 2;
     this.gapRight = xCenter + gapWidth / 2;
 
@@ -287,14 +324,25 @@ class Pipe {
   }
 
   show() {
-    fill(0, 100, 255);
     noStroke();
-    // 左侧障碍物
-    rect(0, this.y, this.gapLeft, this.h);
-    // 右侧障碍物
-    rect(this.gapRight, this.y, windowWidth - this.gapRight, this.h);
+    fill(10, 100, 255); // 使用 HSL 模式，透明度为 100/255，颜色偏蓝
+  
+    let cornerRadius = 20;
+  
+    // 左侧障碍物（圆角矩形）
+    drawingContext.save();
+    drawingContext.beginPath();
+    drawingContext.roundRect(0, this.y, this.gapLeft, this.h, cornerRadius);
+    drawingContext.fill();
+    drawingContext.restore();
+  
+    // 右侧障碍物（圆角矩形）
+    drawingContext.save();
+    drawingContext.beginPath();
+    drawingContext.roundRect(this.gapRight, this.y, windowWidth - this.gapRight, this.h, cornerRadius);
+    drawingContext.fill();
+    drawingContext.restore();
   }
-
   update() {
     this.y += this.speed;
   }
