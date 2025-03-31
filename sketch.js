@@ -223,7 +223,7 @@ function process(hand, i) {
         const openness = totalDist / fingertipIndices.length;
         // Normalize openness (adjust the divisor for sensitivity)
         volume = constrain(openness / 200-0.7, 0, 2) / 2;
-        console.log("Volume:", volume);
+        // console.log("Volume:", volume);
       }
       if (hand.handedness == "Right") {
         acc.x += kp.x;
@@ -370,13 +370,32 @@ function drawKeypoints(hand, i) {
 function drawSkeleton(hand, i) {
   const c = color(colours[i % colours.length]);
   stroke(c);
-  strokeWeight(2);
-  noFill();
+  strokeWeight(10); // 加粗线条
+  strokeJoin(ROUND);
+  strokeCap(ROUND);
+
   const connections = model.getConnections();
   connections.forEach((c) => {
     const [i, j] = c;
     const a = hand.keypoints[i];
     const b = hand.keypoints[j];
     line(a.x, a.y, b.x, b.y);
+  });
+
+  // 手掌关键点大圆点（胖胖的感觉）
+  noStroke();
+  fill(255);
+  const palmIndices = [0, 1, 5, 9, 13, 17];
+  palmIndices.forEach(index => {
+    const kp = hand.keypoints[index];
+    ellipse(kp.x, kp.y, 22); // 加粗圆点
+  });
+
+  // 指尖圆圈增强“手套”感
+  const tipIndices = [4, 8, 12, 16, 20];
+  tipIndices.forEach(index => {
+    const kp = hand.keypoints[index];
+    fill(255);
+    ellipse(kp.x, kp.y, 18);
   });
 }
