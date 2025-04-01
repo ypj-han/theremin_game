@@ -123,8 +123,8 @@ function drawStars(currentTime) {
     ellipse(star.x, star.y, star.size);
   }
 }
-let moon_x = 740;
-let moon_y = 240;
+let moon_x = 970;
+let moon_y = 250;
 
 function drawMoon(currentTime) {
   let closestTime = null;
