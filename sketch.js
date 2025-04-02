@@ -65,7 +65,7 @@ function preload() {
   );
 
   bg = loadImage("./assets/castle.jpg");
-  orb = loadSound("./assets/untitled.wav");
+  orb = loadSound("./assets/overrain.wav");
 }
 
 function cal_scaleNotes() {
